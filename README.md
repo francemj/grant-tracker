@@ -42,6 +42,19 @@ grant-tracker crawl --source ckan
 grant-tracker crawl --source benefits-finder
 ```
 
+### Resolve CKAN URLs
+
+The CKAN API does not provide program URLs. **Crawl automatically runs URL resolution** after ingesting data and before enrichment: CKAN grants are matched to ESDC and Benefits Finder by program name and get their `url` set when possible. You can also run resolution alone with `grant-tracker resolve-urls` (e.g. after a CKAN-only crawl).
+
+### Refresh details
+
+Run `grant-tracker refresh-details` periodically (e.g. daily) to fetch live detail pages for all grants that have a URL (benefits-finder, ckan, esdc), update their `raw_text`, and re-enrich them with Gemini. Use `--source` to limit which sources to refresh (e.g. `--source benefits-finder --source ckan`). Use `--no-enrich` to only update raw text and skip the enrichment step.
+
+```bash
+grant-tracker refresh-details
+grant-tracker refresh-details --source benefits-finder --no-enrich
+```
+
 ### List grants
 
 ```bash

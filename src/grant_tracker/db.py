@@ -182,6 +182,27 @@ class GrantRepository:
                 stale.append(_row_to_grant(row))
         return stale
 
+    def get_ckan_grants_without_url(self) -> list[Grant]:
+        """Return CKAN grants that have no url set (for URL resolution from ESDC/BF)."""
+        rows = self._conn.execute(
+            "SELECT * FROM grants WHERE source = 'ckan' AND (url = '' OR url IS NULL)"
+        ).fetchall()
+        return [_row_to_grant(row) for row in rows]
+
+    def get_grants_for_detail_refresh(
+        self, *, sources: tuple[str, ...] = ("benefits-finder", "ckan", "esdc")
+    ) -> list[Grant]:
+        """Return grants that have a URL and belong to one of the given sources (for refresh-details)."""
+        if not sources:
+            return []
+        placeholders = ",".join("?" * len(sources))
+        query = (
+            f"SELECT * FROM grants WHERE url != '' AND url IS NOT NULL AND source IN ({placeholders}) "
+            "ORDER BY source, source_id"
+        )
+        rows = self._conn.execute(query, sources).fetchall()
+        return [_row_to_grant(row) for row in rows]
+
 
 def _row_to_grant(row: sqlite3.Row) -> Grant:
     return Grant(
