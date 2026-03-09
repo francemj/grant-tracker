@@ -18,7 +18,7 @@ pip install -e .
 
 ## LLM Enrichment
 
-After crawling, grant data is automatically enriched using **Gemini 2.0 Flash** to produce clean structured fields (funding ranges, eligibility, deadlines, relevance scores) from the raw scraped text.
+After crawling, grant data is automatically enriched using **Gemini 2.5 Flash** to produce clean structured fields (funding ranges, eligibility, deadlines, relevance scores) from the raw scraped text.
 
 Set your API key:
 

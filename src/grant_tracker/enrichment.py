@@ -1,4 +1,4 @@
-"""LLM enrichment layer using Gemini 2.0 Flash.
+"""LLM enrichment layer using Gemini 2.5 Flash.
 
 Takes raw scraped grant text and produces clean, structured fields
 via the Google GenAI SDK with structured output.
@@ -9,7 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
+import time
 
+import click
 import structlog
 from google import genai
 
@@ -17,9 +20,12 @@ from grant_tracker.models import EnrichedFields, Grant
 
 logger = structlog.get_logger()
 
-MODEL = "gemini-2.0-flash"
-BATCH_SIZE = 5
-MAX_CONCURRENT = 5
+MODEL = "gemini-2.5-flash"
+BATCH_SIZE = 10
+REQUEST_INTERVAL = 7.0  # seconds between API calls (keeps us under 10 RPM)
+MAX_RETRIES = 3
+INITIAL_RETRY_DELAY = 30.0
+MAX_RETRY_DELAY = 120.0
 
 SYSTEM_PROMPT = """\
 You are a Canadian government grants analyst. You will receive raw scraped \
@@ -44,6 +50,14 @@ are eligible among others, 0.0 = clearly not relevant to non-profits.
 """
 
 
+def _parse_retry_delay(error_text: str) -> float | None:
+    """Extract retry delay from Gemini 429 error message."""
+    match = re.search(r"retry in ([\d.]+)s", error_text, re.IGNORECASE)
+    if match:
+        return float(match.group(1))
+    return None
+
+
 class GeminiEnricher:
     def __init__(self) -> None:
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
@@ -53,6 +67,14 @@ class GeminiEnricher:
             )
         self.client = genai.Client(api_key=api_key)
         self.log = logger.bind(enricher="gemini")
+        self._last_request_time = 0.0
+
+    async def _wait_for_rate_limit(self) -> None:
+        elapsed = time.monotonic() - self._last_request_time
+        remaining = REQUEST_INTERVAL - elapsed
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+        self._last_request_time = time.monotonic()
 
     async def enrich_grants(self, grants: list[Grant]) -> list[Grant]:
         if not grants:
@@ -65,26 +87,53 @@ class GeminiEnricher:
             for i in range(0, len(grants), BATCH_SIZE)
         ]
 
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+        total_batches = len(batches)
         results: list[Grant] = []
 
-        async def process_batch(batch: list[Grant]) -> list[Grant]:
-            async with semaphore:
-                return await self._enrich_batch(batch)
-
-        tasks = [process_batch(batch) for batch in batches]
-        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        for i, result in enumerate(batch_results):
-            if isinstance(result, Exception):
-                self.log.error("batch failed, keeping raw data", batch=i, error=str(result))
-                results.extend(batches[i])
-            else:
-                results.extend(result)
+        for i, batch in enumerate(batches):
+            click.echo(f"  Enriching batch {i + 1}/{total_batches} ({len(batch)} grants)...")
+            enriched_batch = await self._enrich_batch_with_retry(batch, i)
+            results.extend(enriched_batch)
 
         enriched_count = sum(1 for g in results if g.enriched)
         self.log.info("enrichment complete", enriched=enriched_count, total=len(results))
         return results
+
+    async def _enrich_batch_with_retry(
+        self, batch: list[Grant], batch_index: int
+    ) -> list[Grant]:
+        delay = INITIAL_RETRY_DELAY
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                await self._wait_for_rate_limit()
+                return await self._enrich_batch(batch)
+            except Exception as exc:
+                error_text = str(exc)
+                is_rate_limit = "429" in error_text or "RESOURCE_EXHAUSTED" in error_text
+
+                if not is_rate_limit or attempt == MAX_RETRIES:
+                    self.log.error(
+                        "batch failed, keeping raw data",
+                        batch=batch_index,
+                        attempt=attempt + 1,
+                        error=error_text,
+                    )
+                    return batch
+
+                retry_delay = _parse_retry_delay(error_text) or delay
+                retry_delay = min(retry_delay, MAX_RETRY_DELAY)
+                self.log.warning(
+                    "rate limited, retrying",
+                    batch=batch_index,
+                    attempt=attempt + 1,
+                    retry_in=f"{retry_delay:.0f}s",
+                )
+                click.echo(f"    Rate limited — waiting {retry_delay:.0f}s before retry...")
+                await asyncio.sleep(retry_delay)
+                delay = min(delay * 2, MAX_RETRY_DELAY)
+
+        return batch  # unreachable, but satisfies type checker
 
     async def _enrich_batch(self, batch: list[Grant]) -> list[Grant]:
         prompt = self._build_prompt(batch)
@@ -97,6 +146,7 @@ class GeminiEnricher:
                 "response_mime_type": "application/json",
                 "response_schema": list[EnrichedFields],
                 "system_instruction": SYSTEM_PROMPT,
+                "thinking_config": {"thinking_budget": 0},
             },
         )
 
