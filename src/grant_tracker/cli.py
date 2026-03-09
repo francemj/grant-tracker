@@ -110,6 +110,8 @@ def list_grants(ctx: click.Context, source: str | None, status: str | None, leve
             click.echo(f"  Status: {g.status}")
         if g.deadline:
             click.echo(f"  Deadline: {g.deadline}")
+        if g.enriched:
+            click.echo(f"  Accepting applications: {'Yes' if g.accepting_applications else 'No'}")
         if g.funding_min or g.funding_max:
             lo = f"${g.funding_min:,}" if g.funding_min else "?"
             hi = f"${g.funding_max:,}" if g.funding_max else "?"
@@ -159,7 +161,7 @@ def export(ctx: click.Context, fmt: str, output: str | None) -> None:
             "title", "organization", "url", "description", "deadline",
             "funding_min", "funding_max", "eligibility", "funding_level",
             "contact_info", "source", "source_id", "status", "last_crawled",
-            "enriched", "relevance_score",
+            "enriched", "relevance_score", "accepting_applications",
         ]
         out = open(output, "w", newline="") if output else sys.stdout
         writer = csv.DictWriter(out, fieldnames=fields)

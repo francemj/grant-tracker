@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS grants (
     raw_text_hash   TEXT NOT NULL DEFAULT '',
     enriched        INTEGER NOT NULL DEFAULT 0,
     relevance_score REAL NOT NULL DEFAULT 0.0,
+    accepting_applications INTEGER NOT NULL DEFAULT 0,
     UNIQUE(source, source_id)
 );
 """
@@ -38,6 +39,7 @@ MIGRATIONS = [
     "ALTER TABLE grants ADD COLUMN raw_text_hash TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE grants ADD COLUMN enriched INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE grants ADD COLUMN relevance_score REAL NOT NULL DEFAULT 0.0",
+    "ALTER TABLE grants ADD COLUMN accepting_applications INTEGER NOT NULL DEFAULT 0",
 ]
 
 
@@ -67,8 +69,8 @@ class GrantRepository:
                 title, organization, url, description, deadline,
                 funding_min, funding_max, eligibility, funding_level,
                 contact_info, source, source_id, status, last_crawled,
-                raw_text, raw_text_hash, enriched, relevance_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                raw_text, raw_text_hash, enriched, relevance_score, accepting_applications
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source, source_id) DO UPDATE SET
                 title        = excluded.title,
                 organization = excluded.organization,
@@ -85,7 +87,8 @@ class GrantRepository:
                 raw_text     = excluded.raw_text,
                 raw_text_hash = excluded.raw_text_hash,
                 enriched     = excluded.enriched,
-                relevance_score = excluded.relevance_score
+                relevance_score = excluded.relevance_score,
+                accepting_applications = excluded.accepting_applications
             """,
             (
                 grant.title,
@@ -106,6 +109,7 @@ class GrantRepository:
                 grant.raw_text_hash,
                 1 if grant.enriched else 0,
                 grant.relevance_score,
+                1 if grant.accepting_applications else 0,
             ),
         )
         self._conn.commit()
@@ -199,4 +203,5 @@ def _row_to_grant(row: sqlite3.Row) -> Grant:
         raw_text_hash=row["raw_text_hash"],
         enriched=bool(row["enriched"]),
         relevance_score=row["relevance_score"],
+        accepting_applications=bool(row["accepting_applications"]),
     )

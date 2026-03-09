@@ -47,6 +47,9 @@ Set to null for continuous intake or if not found.
 - relevance_score: 1.0 = directly targets non-profits, 0.5 = non-profits \
 are eligible among others, 0.0 = clearly not relevant to non-profits.
 - funding_level: infer from the organization name and context.
+- accepting_applications: True if currently accepting (open or future deadline, \
+continuous intake, or text says "accepting applications"); False if closed, \
+"not accepting", or unclear.
 """
 
 
@@ -227,6 +230,7 @@ class GeminiEnricher:
         grant.contact_info = fields.contact_info
         grant.funding_level = fields.funding_level
         grant.relevance_score = fields.relevance_score
+        grant.accepting_applications = fields.accepting_applications
         grant.enriched = True
         grant.raw_text_hash = grant.compute_raw_text_hash()
         return grant

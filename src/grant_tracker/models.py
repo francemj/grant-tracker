@@ -26,6 +26,7 @@ class EnrichedFields(BaseModel):
     contact_info: str | None = Field(description="Contact email address or phone number. null if not found.")
     funding_level: FundingLevel = Field(description="Level of government providing the grant")
     relevance_score: float = Field(description="0.0 to 1.0 — how relevant is this grant for Canadian not-for-profit organizations")
+    accepting_applications: bool = Field(description="True if the program is currently accepting applications (open deadline, continuous intake, or explicitly stated as accepting). False if closed, not currently accepting, or unclear.")
 
 
 class Grant(BaseModel):
@@ -49,6 +50,7 @@ class Grant(BaseModel):
     raw_text_hash: str = Field(default="", description="SHA-256 of raw_text for change detection")
     enriched: bool = Field(default=False, description="Whether LLM enrichment has been applied")
     relevance_score: float = Field(default=0.0, description="LLM-assigned relevance to non-profits (0-1)")
+    accepting_applications: bool = Field(default=False, description="Whether the program is currently accepting applications")
 
     def compute_raw_text_hash(self) -> str:
         return hashlib.sha256(self.raw_text.encode()).hexdigest()[:16]
