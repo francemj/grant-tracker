@@ -1,0 +1,26 @@
+name: Weekly Crawl & Enrich
+
+on:
+  schedule:
+    # Every Monday at 6:00 AM UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Run crawl on Fly machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a grant-finder -C "grant-tracker --db /data/grants.db crawl"
+
+      - name: Run enrichment on Fly machine
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl ssh console -a grant-finder -C "grant-tracker --db /data/grants.db enrich"
