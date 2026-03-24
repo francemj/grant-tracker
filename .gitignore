@@ -5,4 +5,7 @@ dist/
 build/
 .venv/
 *.db
+*.db-shm
+*.db-wal
 .cursor/
+*.csv

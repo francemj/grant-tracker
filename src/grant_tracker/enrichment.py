@@ -50,6 +50,22 @@ are eligible among others, 0.0 = clearly not relevant to non-profits.
 - accepting_applications: True if currently accepting (open or future deadline, \
 continuous intake, or text says "accepting applications"); False if closed, \
 "not accepting", or unclear.
+- is_applyable_grant: True only if this is a funding opportunity with an external \
+application process (grant/contribution/program where recipients apply for money). \
+False for services, advisors, tools, informational pages, certifications, training \
+offerings without funding, or anything that does not directly provide funding to applicants.
+- categories: pick 1-3 tags from EXACTLY this list: arts-culture, agriculture, \
+business-industry, community-development, education-training, employment, \
+environment-climate, health, housing, indigenous, infrastructure, international, \
+justice-safety, research-innovation, science-technology, social-services, \
+sport-recreation, tourism, transportation, youth. Only use values from this list.
+- provinces: list Canadian province/territory codes where applicants must be \
+located. Use standard 2-letter codes: AB, BC, MB, NB, NL, NS, NT, NU, ON, \
+PE, QC, SK, YT. Use ["ALL"] if the grant is open nationally or no geographic \
+restriction is stated.
+- organization_types: pick all that apply from EXACTLY this list: non-profit, \
+indigenous-org, municipality, province-territory, academic-institution, \
+small-business, industry, individual, other. Only use values from this list.
 """
 
 
@@ -231,6 +247,10 @@ class GeminiEnricher:
         grant.funding_level = fields.funding_level
         grant.relevance_score = fields.relevance_score
         grant.accepting_applications = fields.accepting_applications
+        grant.is_applyable_grant = fields.is_applyable_grant
+        grant.categories = fields.categories
+        grant.provinces = fields.provinces
+        grant.organization_types = fields.organization_types
         grant.enriched = True
         grant.raw_text_hash = grant.compute_raw_text_hash()
         return grant
