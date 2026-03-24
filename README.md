@@ -1,82 +1,114 @@
-# grant-tracker
+# Canadian Grant Finder
 
-A CLI tool that aggregates Canadian government grant data from multiple federal sources, designed to help not-for-profit organizations discover funding opportunities.
+A web app and CLI pipeline that aggregates Canadian federal grant data, enriches it with LLM-extracted metadata, and helps organizations discover relevant funding opportunities through search, filtering, and a guided questionnaire.
+
+**Live at [grant-finder.fly.dev](https://grant-finder.fly.dev)**
+
+## How it works
+
+1. **Crawl** — Three crawlers pull grant data from federal sources (ESDC, CKAN Open Data, Benefits Finder)
+2. **Enrich** — Gemini 2.5 Flash extracts structured fields from raw text: funding ranges, eligibility, deadlines, categories, provinces, organization types, and relevance scores
+3. **Serve** — A FastAPI web app lets users browse, filter, and discover grants matched to their profile
 
 ## Data Sources
 
-| Source | Type | Freshness | What it provides |
-|--------|------|-----------|------------------|
-| **CKAN Proactive Disclosure API** | Live JSON API | Current (includes 2026 data) | Which programs are actively funding non-profits, real award amounts |
-| **ESDC Funding Programs** | HTML scraping | Current | Application status, deadlines, eligibility criteria |
-| **Innovation Canada Benefits Finder** | XLSX download | Snapshot (July 2025) | Broad program catalog with descriptions and eligibility |
+| Source | Type | What it provides |
+|--------|------|------------------|
+| **CKAN Proactive Disclosure API** | Live JSON API | Active funding programs, real award amounts |
+| **ESDC Funding Programs** | HTML scraping | Application status, deadlines, eligibility criteria |
+| **Benefits Finder** | XLSX download | Broad program catalog with descriptions |
 
-## Installation
+## Web App
+
+The web interface provides:
+
+- **Browse & search** with faceted filters (category, province, organization type, funding range, application status)
+- **Grant detail pages** with full eligibility info, funding amounts, deadlines, and similar grants
+- **Guided discovery** — a short questionnaire that matches grants to your organization's profile
+- **HTMX-powered filtering** — no page reloads when adjusting filters
+
+### Running locally
 
 ```bash
 pip install -e .
+grant-tracker web --port 8000
 ```
 
-## LLM Enrichment
-
-After crawling, grant data is automatically enriched using **Gemini 2.5 Flash** to produce clean structured fields (funding ranges, eligibility, deadlines, relevance scores) from the raw scraped text.
-
-Set your API key:
-
-```bash
-export GEMINI_API_KEY="your-key-here"
-```
-
-If no key is set, crawling still works but enrichment is skipped.
-
-## Usage
+## CLI
 
 ### Crawl grant data
 
 ```bash
-# Run all crawlers (enrichment runs automatically)
+# Run all crawlers + enrichment
+export GEMINI_API_KEY="your-key-here"
 grant-tracker crawl
 
 # Run a specific source
 grant-tracker crawl --source esdc
-grant-tracker crawl --source ckan
-grant-tracker crawl --source benefits-finder
 ```
 
-### Resolve CKAN URLs
+### Enrich existing data
 
-The CKAN API does not provide program URLs. **Crawl automatically runs URL resolution** after ingesting data and before enrichment: CKAN grants are matched to ESDC and Benefits Finder by program name and get their `url` set when possible. You can also run resolution alone with `grant-tracker resolve-urls` (e.g. after a CKAN-only crawl).
+```bash
+# Re-enrich unenriched rows
+grant-tracker enrich
 
-### Refresh details
+# Limit to specific sources
+grant-tracker enrich --source ckan --source benefits-finder
+```
 
-Run `grant-tracker refresh-details` periodically (e.g. daily) to fetch live detail pages for all grants that have a URL (benefits-finder, ckan, esdc), update their `raw_text`, and re-enrich them with Gemini. Use `--source` to limit which sources to refresh (e.g. `--source benefits-finder --source ckan`). Use `--no-enrich` to only update raw text and skip the enrichment step.
+### Refresh detail pages
+
+Fetch live HTML for grants with URLs and re-enrich with updated text:
 
 ```bash
 grant-tracker refresh-details
 grant-tracker refresh-details --source benefits-finder --no-enrich
 ```
 
-### List grants
+### List and export
 
 ```bash
-# List all grants
-grant-tracker list
-
-# Filter by status
-grant-tracker list --status accepting
-
-# Search by keyword
 grant-tracker list --search "disability"
+grant-tracker export --format json -o grants.json
+grant-tracker export --format csv -o grants.csv
 ```
 
-### Export data
+## Deployment
+
+The app runs on [Fly.io](https://fly.io) with a persistent volume for the SQLite database.
+
+### Setup
 
 ```bash
-# Export as JSON
-grant-tracker export --format json
-
-# Export as CSV
-grant-tracker export --format csv
+fly launch --no-deploy
+fly volumes create grants_data --size 1 --region yyz
+fly secrets set GEMINI_API_KEY=your-key-here
+fly deploy
 ```
+
+### Seed the database
+
+```bash
+fly ssh console -C "grant-tracker --db /data/grants.db crawl"
+```
+
+### Automated updates
+
+Two GitHub Actions workflows handle CI/CD:
+
+- **Deploy on push** — every push to `main` triggers `fly deploy`
+- **Weekly crawl** — runs every Monday at 6am UTC via `fly ssh`, re-crawling all sources and enriching new data
+
+Both require a `FLY_API_TOKEN` repository secret.
+
+## Tech Stack
+
+- **Backend**: Python 3.11+, FastAPI, SQLite, Pydantic
+- **Frontend**: Jinja2 templates, Tailwind CSS (CDN), HTMX
+- **Enrichment**: Google Gemini 2.5 Flash
+- **Crawling**: httpx, BeautifulSoup, openpyxl
+- **Deployment**: Docker, Fly.io, GitHub Actions
 
 ## Development
 
