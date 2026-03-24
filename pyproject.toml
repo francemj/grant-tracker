@@ -18,6 +18,10 @@ dependencies = [
     "click>=8.1",
     "structlog>=24.0",
     "google-genai>=1.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.18",
 ]
 
 [project.optional-dependencies]
@@ -31,3 +35,6 @@ grant-tracker = "grant_tracker.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+grant_tracker = ["web/templates/**/*.html", "web/static/**"]

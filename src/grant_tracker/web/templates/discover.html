@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Find Grants For Me — Canadian Grant Finder{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+  <div class="text-center mb-10">
+    <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">Find Grants For Your Organization</h1>
+    <p class="text-lg text-gray-600">Answer a few quick questions and we'll show you the most relevant funding opportunities.</p>
+  </div>
+
+  <form action="/discover/results" method="get" class="space-y-8">
+
+    <!-- Step 1: Organization Type -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">What type of organization are you?</h2>
+      <p class="text-sm text-gray-500 mb-4">Select all that apply.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {% for org in org_type_taxonomy %}
+        <label class="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-all has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="checkbox" name="org_types" value="{{ org }}" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          <span class="text-sm font-medium text-gray-700">{{ org_type_labels.get(org, org) }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Step 2: Province -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">Where is your organization located?</h2>
+      <p class="text-sm text-gray-500 mb-4">Select your province or territory.</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {% for code in province_codes %}
+        <label class="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-all has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="checkbox" name="provinces" value="{{ code }}" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          <span class="text-sm font-medium text-gray-700">{{ province_names.get(code, code) }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Step 3: Focus Areas -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">What areas does your organization focus on?</h2>
+      <p class="text-sm text-gray-500 mb-4">Select all relevant categories.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {% for cat in category_taxonomy %}
+        <label class="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-all has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50">
+          <input type="checkbox" name="categories" value="{{ cat }}" class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          <span class="text-sm font-medium text-gray-700">{{ category_labels.get(cat, cat) }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Step 4: Funding -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-1">How much funding are you looking for?</h2>
+      <p class="text-sm text-gray-500 mb-4">Optional. Leave blank to see all amounts.</p>
+      <div class="flex gap-4 max-w-md">
+        <div class="flex-1">
+          <label for="funding_min" class="block text-sm text-gray-600 mb-1">Minimum (CAD)</label>
+          <input type="number" id="funding_min" name="funding_min" placeholder="e.g. 5000"
+            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <div class="flex-1">
+          <label for="funding_max" class="block text-sm text-gray-600 mb-1">Maximum (CAD)</label>
+          <input type="number" id="funding_max" name="funding_max" placeholder="e.g. 100000"
+            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="text-center">
+      <button type="submit" class="px-8 py-3 bg-brand-600 text-white rounded-xl text-lg font-semibold hover:bg-brand-700 transition-colors shadow-lg">
+        Find My Grants
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

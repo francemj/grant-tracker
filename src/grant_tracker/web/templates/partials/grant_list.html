@@ -1,0 +1,59 @@
+<!-- grant_list partial: swapped in by HTMX on filter changes -->
+<div id="grant-results">
+  <div class="flex items-center justify-between mb-4">
+    <p class="text-sm text-gray-600">
+      <span class="font-semibold text-gray-900">{{ total }}</span> grant{{ 's' if total != 1 else '' }} found
+    </p>
+    <div class="flex items-center gap-2">
+      <label for="sort" class="text-sm text-gray-500">Sort by:</label>
+      <select id="sort" name="sort"
+        class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+        hx-get="{{ request.url.path }}"
+        hx-include="[name='q'],[name='categories'],[name='provinces'],[name='org_types'],[name='accepting'],[name='funding_min'],[name='funding_max']"
+        hx-target="#grant-results"
+        hx-swap="outerHTML"
+      >
+        <option value="relevance" {{ 'selected' if sort == 'relevance' }}>Relevance</option>
+        <option value="funding_desc" {{ 'selected' if sort == 'funding_desc' }}>Funding (high to low)</option>
+        <option value="funding_asc" {{ 'selected' if sort == 'funding_asc' }}>Funding (low to high)</option>
+        <option value="deadline" {{ 'selected' if sort == 'deadline' }}>Deadline (soonest)</option>
+        <option value="newest" {{ 'selected' if sort == 'newest' }}>Recently updated</option>
+      </select>
+    </div>
+  </div>
+
+  {% if grants %}
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for grant in grants %}
+      {% include "partials/grant_card.html" %}
+    {% endfor %}
+  </div>
+
+  {% if total_pages > 1 %}
+  <nav class="flex items-center justify-center gap-2 mt-8">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}&q={{ q }}&sort={{ sort }}{% for c in selected_categories %}&categories={{ c }}{% endfor %}{% for p in selected_provinces %}&provinces={{ p }}{% endfor %}{% for o in selected_org_types %}&org_types={{ o }}{% endfor %}{% if accepting %}&accepting=true{% endif %}{% if funding_min %}&funding_min={{ funding_min }}{% endif %}{% if funding_max %}&funding_max={{ funding_max }}{% endif %}"
+       class="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+       hx-get="{{ request.url.path }}?page={{ page - 1 }}&q={{ q }}&sort={{ sort }}{% for c in selected_categories %}&categories={{ c }}{% endfor %}{% for p in selected_provinces %}&provinces={{ p }}{% endfor %}{% for o in selected_org_types %}&org_types={{ o }}{% endfor %}{% if accepting %}&accepting=true{% endif %}{% if funding_min %}&funding_min={{ funding_min }}{% endif %}{% if funding_max %}&funding_max={{ funding_max }}{% endif %}"
+       hx-target="#grant-results" hx-swap="outerHTML"
+    >&larr; Previous</a>
+    {% endif %}
+    <span class="px-3 py-2 text-sm text-gray-600">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}&q={{ q }}&sort={{ sort }}{% for c in selected_categories %}&categories={{ c }}{% endfor %}{% for p in selected_provinces %}&provinces={{ p }}{% endfor %}{% for o in selected_org_types %}&org_types={{ o }}{% endfor %}{% if accepting %}&accepting=true{% endif %}{% if funding_min %}&funding_min={{ funding_min }}{% endif %}{% if funding_max %}&funding_max={{ funding_max }}{% endif %}"
+       class="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+       hx-get="{{ request.url.path }}?page={{ page + 1 }}&q={{ q }}&sort={{ sort }}{% for c in selected_categories %}&categories={{ c }}{% endfor %}{% for p in selected_provinces %}&provinces={{ p }}{% endfor %}{% for o in selected_org_types %}&org_types={{ o }}{% endfor %}{% if accepting %}&accepting=true{% endif %}{% if funding_min %}&funding_min={{ funding_min }}{% endif %}{% if funding_max %}&funding_max={{ funding_max }}{% endif %}"
+       hx-target="#grant-results" hx-swap="outerHTML"
+    >Next &rarr;</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+  {% else %}
+  <div class="text-center py-16">
+    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+    <h3 class="mt-4 text-lg font-medium text-gray-900">No grants found</h3>
+    <p class="mt-2 text-sm text-gray-500">Try adjusting your filters or search terms.</p>
+  </div>
+  {% endif %}
+</div>

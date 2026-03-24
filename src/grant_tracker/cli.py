@@ -38,58 +38,58 @@ def cli(ctx: click.Context, db_path: str) -> None:
 @click.option("--no-details", is_flag=True, help="(ESDC) Skip fetching detail pages for faster crawling.")
 @click.pass_context
 def crawl(ctx: click.Context, source: str, no_details: bool) -> None:
-    """Crawl grant sources, enrich with LLM, and store results."""
+    """Crawl grant sources, enrich with LLM, filter out non-grants, and store results."""
     db = GrantRepository(ctx.obj["db_path"])
     sources_to_run = SOURCES if source == "all" else (source,)
 
-    total = 0
+    crawled: list = []
+    total_crawled = 0
     for src in sources_to_run:
         click.echo(f"\n{'='*60}")
         click.echo(f"  Crawling: {src}")
         click.echo(f"{'='*60}")
         crawler = _make_crawler(src, no_details=no_details)
         grants = asyncio.run(crawler.crawl())
-        count = db.upsert_many(grants)
-        click.echo(f"  -> {count} grants upserted from {src}")
-        total += count
+        crawled.extend(grants)
+        total_crawled += len(grants)
+        click.echo(f"  -> {len(grants)} grants crawled from {src}")
 
-    click.echo(f"\nCrawling complete. {total} total grants upserted.")
+    click.echo(f"\nCrawling complete. {total_crawled} total rows crawled.")
 
-    ckan_grants = db.get_ckan_grants_without_url()
+    # Resolve CKAN URLs in-memory (no DB writes yet).
+    ckan_grants = [g for g in crawled if getattr(g, "source", "") == "ckan" and not (g.url and g.url.strip())]
     if ckan_grants:
         click.echo(f"\n{'='*60}")
         click.echo("  Resolving CKAN URLs from ESDC and Benefits Finder")
         click.echo(f"{'='*60}")
-        esdc_grants = db.get_grants(source="esdc")
-        bf_grants = db.get_grants(source="benefits-finder")
-        esdc_lookup = build_url_lookup(esdc_grants, source="esdc")
-        bf_lookup = build_url_lookup(bf_grants, source="benefits-finder")
+        esdc_lookup = build_url_lookup(crawled, source="esdc")
+        bf_lookup = build_url_lookup(crawled, source="benefits-finder")
         updated = resolve_ckan_urls(ckan_grants, esdc_lookup, bf_lookup)
-        if updated:
-            db.upsert_many(updated)
         click.echo(f"  -> Resolved URLs for {len(updated)} of {len(ckan_grants)} CKAN grants.")
 
-    unenriched = db.get_unenriched_grants()
-    if unenriched:
-        click.echo(f"\n{'='*60}")
-        click.echo(f"  Enriching {len(unenriched)} grants with Gemini")
-        click.echo(f"{'='*60}")
-        try:
-            from grant_tracker.enrichment import GeminiEnricher
-            enricher = GeminiEnricher()
-            enriched = asyncio.run(enricher.enrich_grants(unenriched))
-            db.upsert_many(enriched)
-            enriched_count = sum(1 for g in enriched if g.enriched)
-            click.echo(f"  -> {enriched_count} grants enriched")
-        except RuntimeError as exc:
-            click.echo(f"  Skipping enrichment: {exc}")
-        except Exception:
-            click.echo("  Enrichment failed (see logs). Raw data was saved.")
-            structlog.get_logger().error("enrichment failed", exc_info=True)
-    else:
-        click.echo("  All grants already enriched.")
+    # Enrich in-memory, then filter out non-grants before writing to SQLite.
+    click.echo(f"\n{'='*60}")
+    click.echo(f"  Enriching {len(crawled)} rows with Gemini")
+    click.echo(f"{'='*60}")
 
-    click.echo(f"\nDone. Database: {ctx.obj['db_path']}")
+    enriched = crawled
+    try:
+        from grant_tracker.enrichment import GeminiEnricher
+        enricher = GeminiEnricher()
+        enriched = asyncio.run(enricher.enrich_grants(crawled))
+    except RuntimeError as exc:
+        click.echo(f"  Skipping enrichment (and filtering): {exc}")
+    except Exception:
+        click.echo("  Enrichment failed (see logs). Proceeding without filtering.")
+        structlog.get_logger().error("enrichment failed", exc_info=True)
+
+    only_grants = [g for g in enriched if getattr(g, "is_applyable_grant", True)]
+    dropped = len(enriched) - len(only_grants)
+    click.echo(f"  -> Keeping {len(only_grants)} applyable grants; dropped {dropped} non-grant rows.")
+
+    total_upserted = db.upsert_many(only_grants)
+    click.echo(f"\nDone. {total_upserted} total grants upserted. Database: {ctx.obj['db_path']}")
+
     click.echo(f"Total grants in database: {db.count()}")
     db.close()
 
@@ -116,6 +116,62 @@ def resolve_urls(ctx: click.Context) -> None:
         db.upsert_many(updated)
 
     click.echo(f"Resolved URLs for {len(updated)} of {len(ckan_grants)} CKAN grants.")
+    db.close()
+
+
+@cli.command("enrich")
+@click.option("--source", "sources", type=click.Choice(SOURCES), multiple=True, help="Only enrich these sources (default: all).")
+@click.option("--limit", type=int, default=None, help="Max number of rows to enrich (default: all).")
+@click.pass_context
+def enrich(ctx: click.Context, sources: tuple[str, ...], limit: int | None) -> None:
+    """Enrich existing DB rows with Gemini, without crawling.
+
+    This is useful for retrying enrichment after quota/rate-limit issues.
+    Non-grant rows (is_applyable_grant=False) are removed from the DB.
+    """
+    db = GrantRepository(ctx.obj["db_path"])
+
+    # Keep CKAN URLs up to date before enrichment (helps downstream detail refresh).
+    esdc_grants = db.get_grants(source="esdc")
+    bf_grants = db.get_grants(source="benefits-finder")
+    esdc_lookup = build_url_lookup(esdc_grants, source="esdc")
+    bf_lookup = build_url_lookup(bf_grants, source="benefits-finder")
+    ckan_grants = db.get_ckan_grants_without_url()
+    if ckan_grants:
+        updated_urls = resolve_ckan_urls(ckan_grants, esdc_lookup, bf_lookup)
+        if updated_urls:
+            db.upsert_many(updated_urls)
+        click.echo(f"Resolved CKAN URLs for {len(updated_urls)} of {len(ckan_grants)} rows.")
+
+    sources_to_enrich = sources if sources else SOURCES
+    unenriched = db.get_unenriched_grants_for_sources(sources_to_enrich)
+    if limit is not None:
+        unenriched = unenriched[:limit]
+
+    if not unenriched:
+        click.echo("No rows to enrich.")
+        db.close()
+        return
+
+    click.echo(f"Enriching {len(unenriched)} rows (sources: {', '.join(sources_to_enrich)})...")
+    try:
+        from grant_tracker.enrichment import GeminiEnricher
+        enricher = GeminiEnricher()
+        enriched = asyncio.run(enricher.enrich_grants(unenriched))
+    except RuntimeError as exc:
+        click.echo(f"Skipping enrichment: {exc}")
+        db.close()
+        return
+
+    only_grants = [g for g in enriched if getattr(g, "is_applyable_grant", True)]
+    dropped = [g for g in enriched if not getattr(g, "is_applyable_grant", True)]
+
+    if only_grants:
+        db.upsert_many(only_grants)
+    if dropped:
+        deleted = db.delete_by_source_keys([(g.source, g.source_id) for g in dropped])
+        click.echo(f"Dropped {len(dropped)} non-grant rows (deleted {deleted} from DB).")
+    click.echo(f"Enriched and kept {len(only_grants)} applyable grants.")
     db.close()
 
 
@@ -271,6 +327,22 @@ def export(ctx: click.Context, fmt: str, output: str | None) -> None:
         if output:
             out.close()
             click.echo(f"Exported {len(grants)} grants to {output}")
+
+
+@cli.command()
+@click.option("--host", default="0.0.0.0", help="Bind host.")
+@click.option("--port", default=8000, type=int, help="Bind port.")
+@click.option("--reload", "use_reload", is_flag=True, help="Enable auto-reload for development.")
+def web(host: str, port: int, use_reload: bool) -> None:
+    """Start the web application."""
+    import uvicorn
+    uvicorn.run(
+        "grant_tracker.web.app:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=use_reload,
+    )
 
 
 def _make_crawler(source: str, *, no_details: bool = False):

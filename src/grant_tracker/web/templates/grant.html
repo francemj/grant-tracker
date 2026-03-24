@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}{{ grant.title }} — Canadian Grant Finder{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="javascript:void(0)" onclick="history.back()" class="hover:text-brand-600 transition-colors">&larr; Back to results</a>
+  </nav>
+
+  <!-- Header -->
+  <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8 mb-6">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{{ grant.title }}</h1>
+        <p class="text-gray-600">{{ grant.organization }}</p>
+      </div>
+      {% if grant.accepting_applications %}
+      <span class="shrink-0 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">Accepting Applications</span>
+      {% else %}
+      <span class="shrink-0 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">Not Currently Accepting</span>
+      {% endif %}
+    </div>
+
+    <!-- Tags -->
+    <div class="flex flex-wrap gap-2 mb-6">
+      {% for cat in grant.categories %}
+      <a href="/grants?categories={{ cat }}" class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors">{{ category_labels.get(cat, cat) }}</a>
+      {% endfor %}
+      {% for prov in grant.provinces %}
+      <span class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-purple-50 text-purple-700">{{ province_names.get(prov, prov) }}</span>
+      {% endfor %}
+      {% for org in grant.organization_types %}
+      <span class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-amber-50 text-amber-700">{{ org_type_labels.get(org, org) }}</span>
+      {% endfor %}
+    </div>
+
+    {% if grant.url %}
+    <a href="{{ grant.url }}" target="_blank" rel="noopener noreferrer"
+       class="inline-flex items-center gap-2 px-6 py-3 bg-brand-600 text-white rounded-xl font-semibold hover:bg-brand-700 transition-colors shadow-sm">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+      Visit Grant Page
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Details Grid -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+    <!-- Funding -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Funding</h2>
+      {% if grant.funding_min or grant.funding_max %}
+      <p class="text-2xl font-bold text-gray-900">
+        {% if grant.funding_min and grant.funding_max and grant.funding_min == grant.funding_max %}
+          ${{ "{:,}".format(grant.funding_max) }}
+        {% elif grant.funding_min and grant.funding_max %}
+          ${{ "{:,}".format(grant.funding_min) }} &ndash; ${{ "{:,}".format(grant.funding_max) }}
+        {% elif grant.funding_max %}
+          Up to ${{ "{:,}".format(grant.funding_max) }}
+        {% elif grant.funding_min %}
+          From ${{ "{:,}".format(grant.funding_min) }}
+        {% endif %}
+      </p>
+      {% else %}
+      <p class="text-lg text-gray-500">Amount varies or not specified</p>
+      {% endif %}
+      <p class="text-sm text-gray-500 mt-1">{{ grant.funding_level.value | title }} funding</p>
+    </div>
+
+    <!-- Deadline & Contact -->
+    <div class="bg-white rounded-xl border border-gray-200 p-6">
+      <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Key Dates</h2>
+      {% if grant.deadline and grant.deadline != 'null' and grant.deadline != 'None' %}
+      <p class="text-lg font-semibold text-gray-900">{{ grant.deadline }}</p>
+      {% else %}
+      <p class="text-lg text-gray-500">Ongoing / Continuous intake</p>
+      {% endif %}
+      {% if grant.contact_info %}
+      <p class="text-sm text-gray-600 mt-3">Contact: {{ grant.contact_info }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Description -->
+  {% if grant.description %}
+  <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8 mb-6">
+    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Description</h2>
+    <p class="text-gray-700 leading-relaxed whitespace-pre-line">{{ grant.description }}</p>
+  </div>
+  {% endif %}
+
+  <!-- Eligibility -->
+  {% if grant.eligibility %}
+  <div class="bg-white rounded-xl border border-gray-200 p-6 sm:p-8 mb-6">
+    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Eligibility</h2>
+    <div class="text-gray-700 leading-relaxed whitespace-pre-line">{{ grant.eligibility }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Metadata -->
+  <div class="bg-gray-100 rounded-xl p-5 text-sm text-gray-500 flex flex-wrap gap-x-6 gap-y-1">
+    <span>Source: {{ grant.source }}</span>
+    <span>Last updated: {{ grant.last_crawled.strftime('%B %d, %Y') }}</span>
+    {% if grant.relevance_score %}
+    <span>Relevance score: {{ "%.0f"|format(grant.relevance_score * 100) }}%</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Similar Grants -->
+{% if similar %}
+<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 mb-16">
+  <h2 class="text-xl font-bold text-gray-900 mb-4">Similar Grants</h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for grant in similar %}
+      {% include "partials/grant_card.html" %}
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

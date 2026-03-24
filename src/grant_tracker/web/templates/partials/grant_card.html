@@ -1,0 +1,46 @@
+<a href="/grants/{{ grant.id }}" class="block h-full">
+<article class="bg-white rounded-xl border border-gray-200 hover:border-brand-300 hover:shadow-md transition-all p-5 flex flex-col h-full">
+  <div class="flex items-start justify-between gap-2 mb-2">
+    <h3 class="font-semibold text-gray-900 line-clamp-2 text-sm leading-snug flex-1">
+      {{ grant.title }}
+    </h3>
+    {% if grant.accepting_applications %}
+    <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Open</span>
+    {% else %}
+    <span class="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Closed</span>
+    {% endif %}
+  </div>
+  <p class="text-xs text-gray-500 mb-2">{{ grant.organization }}</p>
+  <p class="text-sm text-gray-600 line-clamp-3 mb-3 flex-1">{{ grant.description[:200] if grant.description else '' }}</p>
+  <div class="flex flex-wrap gap-1.5 mb-3">
+    {% for cat in grant.categories[:3] %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700">{{ category_labels.get(cat, cat) }}</span>
+    {% endfor %}
+    {% for prov in grant.provinces[:3] %}
+    {% if prov != 'ALL' %}
+    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-purple-50 text-purple-700">{{ prov }}</span>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100">
+    <div>
+      {% if grant.funding_min or grant.funding_max %}
+        {% if grant.funding_min and grant.funding_max and grant.funding_min == grant.funding_max %}
+          ${{ "{:,}".format(grant.funding_max) }}
+        {% elif grant.funding_min and grant.funding_max %}
+          ${{ "{:,}".format(grant.funding_min) }} &ndash; ${{ "{:,}".format(grant.funding_max) }}
+        {% elif grant.funding_max %}
+          Up to ${{ "{:,}".format(grant.funding_max) }}
+        {% elif grant.funding_min %}
+          From ${{ "{:,}".format(grant.funding_min) }}
+        {% endif %}
+      {% else %}
+        Amount varies
+      {% endif %}
+    </div>
+    {% if grant.deadline and grant.deadline != 'null' and grant.deadline != 'None' %}
+    <div>Deadline: {{ grant.deadline }}</div>
+    {% endif %}
+  </div>
+</article>
+</a>
