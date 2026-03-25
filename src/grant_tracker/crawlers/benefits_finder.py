@@ -9,8 +9,9 @@ Dataset: https://open.canada.ca/data/en/dataset/4e75337e-70d0-4ed7-92d1-3b85192e
 
 from __future__ import annotations
 
-import io
+import os
 import re
+import tempfile
 from enum import Enum
 
 import openpyxl
@@ -57,10 +58,31 @@ class BenefitsFinderCrawler(BaseCrawler):
         xlsx_url = await self._resolve_latest_xlsx_url()
         self.log.info("downloading XLSX", url=xlsx_url)
 
-        async with self._make_client() as client:
-            resp = await self._get(client, xlsx_url)
+        tmp_path = None
+        try:
+            async with self._make_client() as client:
+                # Stream to disk to avoid holding the full XLSX in memory (important on Fly 512MB).
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    suffix=".xlsx",
+                    prefix="benefits-finder-",
+                    delete=False,
+                    dir="/tmp",
+                ) as f:
+                    tmp_path = f.name
+                    async with client.stream("GET", xlsx_url) as resp:
+                        resp.raise_for_status()
+                        async for chunk in resp.aiter_bytes():
+                            if chunk:
+                                f.write(chunk)
 
-        wb = openpyxl.load_workbook(io.BytesIO(resp.content), read_only=True)
+            wb = openpyxl.load_workbook(tmp_path, read_only=True)
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
         ws = wb.active
 
         grants: list[Grant] = []

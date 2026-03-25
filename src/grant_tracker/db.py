@@ -110,42 +110,28 @@ class GrantRepository:
     # ------------------------------------------------------------------
 
     def upsert_grant(self, grant: Grant) -> None:
-        self._conn.execute(
-            _UPSERT_SQL,
-            (
-                grant.title,
-                grant.organization,
-                grant.url,
-                grant.description,
-                grant.deadline,
-                grant.funding_min,
-                grant.funding_max,
-                grant.eligibility,
-                grant.funding_level.value,
-                grant.contact_info,
-                grant.source,
-                grant.source_id,
-                grant.status,
-                grant.last_crawled.isoformat(),
-                grant.raw_text,
-                grant.raw_text_hash,
-                1 if grant.enriched else 0,
-                grant.relevance_score,
-                1 if grant.accepting_applications else 0,
-                1 if grant.is_applyable_grant else 0,
-                json.dumps(grant.categories),
-                json.dumps(grant.provinces),
-                json.dumps(grant.organization_types),
-            ),
-        )
+        self._conn.execute(_UPSERT_SQL, _grant_to_upsert_tuple(grant))
         self._conn.commit()
 
-    def upsert_many(self, grants: list[Grant]) -> int:
-        count = 0
-        for grant in grants:
-            self.upsert_grant(grant)
-            count += 1
-        return count
+    def upsert_many(self, grants: list[Grant], *, chunk_size: int = 200) -> int:
+        """Upsert many grants efficiently in chunks.
+
+        Uses `executemany` and commits once per chunk to reduce overhead and
+        peak memory pressure compared to per-row commits.
+        """
+        if not grants:
+            return 0
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be >= 1")
+
+        cur = self._conn.cursor()
+        total = 0
+        for i in range(0, len(grants), chunk_size):
+            chunk = grants[i : i + chunk_size]
+            cur.executemany(_UPSERT_SQL, (_grant_to_upsert_tuple(g) for g in chunk))
+            self._conn.commit()
+            total += len(chunk)
+        return total
 
     def delete_by_source_keys(self, keys: list[tuple[str, str]]) -> int:
         """Delete grants by (source, source_id). Returns number of deleted rows."""
@@ -427,4 +413,32 @@ def _row_to_grant(row: sqlite3.Row) -> Grant:
         categories=json.loads(row["categories"]) if row["categories"] else [],
         provinces=json.loads(row["provinces"]) if row["provinces"] else [],
         organization_types=json.loads(row["organization_types"]) if row["organization_types"] else [],
+    )
+
+
+def _grant_to_upsert_tuple(grant: Grant) -> tuple:
+    return (
+        grant.title,
+        grant.organization,
+        grant.url,
+        grant.description,
+        grant.deadline,
+        grant.funding_min,
+        grant.funding_max,
+        grant.eligibility,
+        grant.funding_level.value,
+        grant.contact_info,
+        grant.source,
+        grant.source_id,
+        grant.status,
+        grant.last_crawled.isoformat(),
+        grant.raw_text,
+        grant.raw_text_hash,
+        1 if grant.enriched else 0,
+        grant.relevance_score,
+        1 if grant.accepting_applications else 0,
+        1 if grant.is_applyable_grant else 0,
+        json.dumps(grant.categories),
+        json.dumps(grant.provinces),
+        json.dumps(grant.organization_types),
     )

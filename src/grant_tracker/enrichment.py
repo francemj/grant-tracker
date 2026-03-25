@@ -16,6 +16,8 @@ import click
 import structlog
 from google import genai
 
+from collections.abc import AsyncIterator
+
 from grant_tracker.models import EnrichedFields, Grant
 
 logger = structlog.get_logger()
@@ -96,27 +98,34 @@ class GeminiEnricher:
         self._last_request_time = time.monotonic()
 
     async def enrich_grants(self, grants: list[Grant]) -> list[Grant]:
-        if not grants:
-            return grants
+        """Enrich a list of grants and return the enriched list.
 
-        self.log.info("starting enrichment", total=len(grants))
-
-        batches = [
-            grants[i : i + BATCH_SIZE]
-            for i in range(0, len(grants), BATCH_SIZE)
-        ]
-
-        total_batches = len(batches)
+        Prefer `enrich_grants_stream()` for low-memory batch processing.
+        """
         results: list[Grant] = []
-
-        for i, batch in enumerate(batches):
-            click.echo(f"  Enriching batch {i + 1}/{total_batches} ({len(batch)} grants)...")
-            enriched_batch = await self._enrich_batch_with_retry(batch, i)
+        async for enriched_batch in self.enrich_grants_stream(grants):
             results.extend(enriched_batch)
 
         enriched_count = sum(1 for g in results if g.enriched)
         self.log.info("enrichment complete", enriched=enriched_count, total=len(results))
         return results
+
+    async def enrich_grants_stream(self, grants: list[Grant]) -> AsyncIterator[list[Grant]]:
+        """Async generator yielding enriched batches of size `BATCH_SIZE`."""
+        if not grants:
+            return
+
+        self.log.info("starting enrichment", total=len(grants))
+
+        total_batches = (len(grants) + BATCH_SIZE - 1) // BATCH_SIZE
+        for batch_index in range(total_batches):
+            start = batch_index * BATCH_SIZE
+            batch = grants[start : start + BATCH_SIZE]
+            click.echo(
+                f"  Enriching batch {batch_index + 1}/{total_batches} ({len(batch)} grants)..."
+            )
+            enriched_batch = await self._enrich_batch_with_retry(batch, batch_index)
+            yield enriched_batch
 
     async def _enrich_batch_with_retry(
         self, batch: list[Grant], batch_index: int
