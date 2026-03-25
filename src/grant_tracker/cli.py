@@ -132,9 +132,7 @@ def crawl(ctx: click.Context, source: str, no_details: bool, no_enrich: bool, en
         click.echo(f"\n{'='*60}")
         click.echo("  Enriching crawled rows from DB (enrich-after)")
         click.echo(f"{'='*60}")
-        # Reuse the existing `enrich` command behavior (it also deletes non-grants).
-        # We call the function directly to avoid extra process overhead on Fly.
-        enrich(ctx, sources=tuple(requested_sources), limit=None)  # type: ignore[arg-type]
+        _run_enrich_for_sources(db, tuple(requested_sources), limit=None)
 
     click.echo(f"\nDone. {total_upserted} total grants upserted. Database: {ctx.obj['db_path']}")
     click.echo(f"Total grants in database: {db.count()}")
@@ -177,7 +175,13 @@ def enrich(ctx: click.Context, sources: tuple[str, ...], limit: int | None) -> N
     Non-grant rows (is_applyable_grant=False) are removed from the DB.
     """
     db = GrantRepository(ctx.obj["db_path"])
+    try:
+        _run_enrich_for_sources(db, sources, limit)
+    finally:
+        db.close()
 
+
+def _run_enrich_for_sources(db: GrantRepository, sources: tuple[str, ...], limit: int | None) -> None:
     # Keep CKAN URLs up to date before enrichment (helps downstream detail refresh).
     esdc_grants = db.get_grants(source="esdc")
     bf_grants = db.get_grants(source="benefits-finder")
@@ -197,15 +201,14 @@ def enrich(ctx: click.Context, sources: tuple[str, ...], limit: int | None) -> N
 
     if not unenriched:
         click.echo("No rows to enrich.")
-        db.close()
         return
 
     try:
         from grant_tracker.enrichment import GeminiEnricher
+
         enricher = GeminiEnricher()
     except RuntimeError as exc:
         click.echo(f"Skipping enrichment: {exc}")
-        db.close()
         return
 
     click.echo(f"Enriching {len(unenriched)} rows (sources: {', '.join(sources_to_enrich)})...")
@@ -233,7 +236,6 @@ def enrich(ctx: click.Context, sources: tuple[str, ...], limit: int | None) -> N
     if dropped:
         click.echo(f"Dropped {dropped} non-grant rows (deleted {deleted} from DB).")
     click.echo(f"Enriched and kept {kept} applyable grants.")
-    db.close()
 
 
 REFRESH_SOURCES_DEFAULT = ("benefits-finder", "ckan", "esdc")
