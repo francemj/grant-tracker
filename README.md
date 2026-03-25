@@ -90,7 +90,11 @@ fly deploy
 ### Seed the database
 
 ```bash
-fly ssh console -C "grant-tracker --db /data/grants.db crawl"
+# Low-memory safe: crawl/write first, then enrich from DB in batches
+fly ssh console -C "grant-tracker --db /data/grants.db crawl --enrich-after --chunk-size 100"
+
+# If you still hit memory limits, skip enrichment during seeding and run it later
+fly ssh console -C "grant-tracker --db /data/grants.db crawl --no-enrich --chunk-size 100"
 ```
 
 ### Automated updates
