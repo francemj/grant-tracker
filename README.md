@@ -102,7 +102,9 @@ fly ssh console -C "grant-tracker --db /data/grants.db crawl --no-enrich --chunk
 Two GitHub Actions workflows handle CI/CD:
 
 - **Deploy on push** — every push to `main` triggers `fly deploy`
-- **Weekly crawl** — runs every Monday at 6am UTC, explicitly wakes a scaled-to-zero Fly machine, runs `crawl --no-enrich`, then runs a standalone `enrich` pass
+- **Weekly crawl** — runs every Monday at 6am UTC, waits for SSH after ensuring the Fly machine is started, runs `crawl --no-enrich`, then runs a standalone `enrich` pass
+
+Fly autostop is based on [HTTP traffic through Fly Proxy](https://fly.io/docs/reference/fly-proxy-autostop-autostart/), not on `fly ssh` sessions, so idle web apps can still be stopped while a CI job is connected. This app’s `fly.toml` sets `min_machines_running = 1` in the primary region so one machine stays up for reliable SSH jobs.
 
 Both require a `FLY_API_TOKEN` repository secret.
 

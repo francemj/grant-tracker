@@ -15,12 +15,16 @@ primary_region = 'yyz'
   source = 'grants_data'
   destination = '/data'
 
+# Autostop is decided by Fly Proxy from HTTP request load (concurrency soft_limit), not SSH/CI.
+# See https://fly.io/docs/reference/fly-proxy-autostop-autostart/
+# Long `fly ssh console` jobs do not count as that traffic, so a lone machine can still be stopped
+# when the web app is idle. Keep at least one machine running so crawls/enrich over SSH stay reliable.
 [http_service]
   internal_port = 8000
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
 [[vm]]
   size = 'shared-cpu-1x'
