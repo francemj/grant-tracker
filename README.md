@@ -102,7 +102,7 @@ fly ssh console -C "grant-tracker --db /data/grants.db crawl --no-enrich --chunk
 Two GitHub Actions workflows handle CI/CD:
 
 - **Deploy on push** — every push to `main` triggers `fly deploy`
-- **Weekly crawl** — runs every Monday at 6am UTC via `fly ssh`, re-crawling all sources and enriching new data
+- **Weekly crawl** — runs every Monday at 6am UTC, explicitly wakes a scaled-to-zero Fly machine, runs `crawl --no-enrich`, then runs a standalone `enrich` pass
 
 Both require a `FLY_API_TOKEN` repository secret.
 

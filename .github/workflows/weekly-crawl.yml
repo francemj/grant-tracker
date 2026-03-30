@@ -9,18 +9,58 @@ on:
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    env:
+      FLY_APP: grant-finder
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - name: Install flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Run crawl on Fly machine
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Wake machine and wait for SSH readiness
         run: |
-          flyctl ssh console -a grant-finder -C "grant-tracker --db /data/grants.db crawl"
+          set -euo pipefail
+          MACHINE_ID="$(flyctl machine list -a "$FLY_APP" --json | python -c 'import json,sys; machines=json.load(sys.stdin); print((machines[0]["id"] if machines else ""), end="")')"
+          if [ -z "$MACHINE_ID" ]; then
+            echo "No Fly machine found for app $FLY_APP"
+            exit 1
+          fi
+
+          flyctl machine start -a "$FLY_APP" "$MACHINE_ID" || true
+
+          for attempt in {1..24}; do
+            if flyctl ssh console -a "$FLY_APP" -C "echo machine-ready" >/dev/null 2>&1; then
+              echo "Fly machine is ready for SSH."
+              exit 0
+            fi
+            echo "Waiting for machine readiness ($attempt/24)..."
+            sleep 5
+          done
+
+          echo "Timed out waiting for Fly machine SSH readiness."
+          exit 1
+
+      - name: Run crawl on Fly machine (no enrich)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 120m flyctl ssh console -a "$FLY_APP" -C "grant-tracker --db /data/grants.db crawl --no-enrich"; then
+              exit 0
+            fi
+            echo "Crawl attempt $attempt failed; retrying after short delay..."
+            sleep 10
+          done
+          echo "Crawl failed after retries."
+          exit 1
 
       - name: Run enrichment on Fly machine
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          flyctl ssh console -a grant-finder -C "grant-tracker --db /data/grants.db enrich"
+          set -euo pipefail
+          for attempt in 1 2; do
+            if timeout 120m flyctl ssh console -a "$FLY_APP" -C "grant-tracker --db /data/grants.db enrich"; then
+              exit 0
+            fi
+            echo "Enrichment attempt $attempt failed; retrying after short delay..."
+            sleep 10
+          done
+          echo "Enrichment failed after retries."
+          exit 1
